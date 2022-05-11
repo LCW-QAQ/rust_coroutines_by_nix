@@ -2,15 +2,15 @@ use std::{future::Future, task::Poll};
 
 use nix::{
     errno::Errno,
-    fcntl::{fcntl, FcntlArg, OFlag},
+    fcntl::{fcntl, OFlag},
     sys::{
-        epoll::{self, EpollFlags},
+        epoll::EpollFlags,
         socket::{self, sockopt::ReusePort, AddressFamily, SockFlag, SockType, SockaddrIn},
     },
     unistd,
 };
 
-use super::rt::{EPFD, FD_MAP, TASK_FD_OP};
+use super::rt::{FD_MAP, TASK_FD_OP};
 
 #[derive(Debug)]
 pub struct TcpSocket {
@@ -75,7 +75,9 @@ impl TcpSocket {
 
 impl Drop for TcpSocket {
     fn drop(&mut self) {
-        FD_MAP.lock().unwrap().remove(&self.fd);
+        unsafe {
+            (*FD_MAP).remove(&self.fd);
+        }
         unistd::close(self.fd).unwrap();
         println!("TcpSocket droped, {:?}", self);
     }

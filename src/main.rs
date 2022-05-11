@@ -57,7 +57,7 @@ fn main() {
                                 }
                                 Err(err) => eprintln!("read err: {}", err.desc()),
                             };
-                            break;
+                            break; // 一次读写候直接结束
                         }
                     });
                 }

@@ -1,5 +1,5 @@
 use core::future::Future;
-use std::task::Context;
+use std::{collections::HashMap, task::Context};
 
 use nix::{
     errno::Errno,
@@ -23,12 +23,16 @@ impl<'a> Executor<'a> {
         let mut cx = Context::from_waker(&waker);
 
         unsafe {
+            // 初始化EPFD
             EPFD = match epoll::epoll_create1(EpollCreateFlags::EPOLL_CLOEXEC) {
                 Ok(it) => it,
                 Err(err) => {
                     panic!("{}", err.desc());
                 }
             };
+
+            // 初始化FD_MAP
+            FD_MAP = &mut HashMap::new();
         }
 
         loop {
@@ -50,7 +54,7 @@ impl<'a> Executor<'a> {
             unsafe {
                 for i in 0..n {
                     let fd = self.events[i].data() as i32;
-                    let (idx, ep_flag) = FD_MAP.lock().unwrap()[&fd].clone();
+                    let (idx, ep_flag) = (*FD_MAP)[&fd].clone();
 
                     // 当前协程运行完成
                     if TASK_ARRAY[idx].as_mut().poll(&mut cx).is_ready() {
@@ -62,7 +66,7 @@ impl<'a> Executor<'a> {
 
                     // fd与全局fd记录的不一致，说明上面的poll中产生了新的IO
                     if fd != TASK_FD_OP.0 {
-                        FD_MAP.lock().unwrap().insert(fd, (idx, TASK_FD_OP.1));
+                        (*FD_MAP).insert(fd, (idx, TASK_FD_OP.1));
 
                         let mut event = EpollEvent::new(TASK_FD_OP.1, fd as u64);
                         if let Err(err) =
@@ -80,7 +84,7 @@ impl<'a> Executor<'a> {
                         let mut event = EpollEvent::new(TASK_FD_OP.1, TASK_FD_OP.0 as u64);
                         match epoll::epoll_ctl(EPFD, EpollOp::EpollCtlMod, TASK_FD_OP.0, &mut event)
                         {
-                            Ok(_) => FD_MAP.lock().unwrap().get_mut(&fd).unwrap().1 = TASK_FD_OP.1,
+                            Ok(_) => (*FD_MAP).get_mut(&fd).unwrap().1 = TASK_FD_OP.1,
                             Err(err) => panic!("{}", err.desc()),
                         };
                     }
@@ -95,11 +99,8 @@ impl<'a> Executor<'a> {
                 let task = &mut TASK_ARRAY[idx];
                 // 直接poll
                 if task.as_mut().poll(cx).is_pending() {
-                    // 如果是pending就加入FD_MAP.lock().unwrap()中
-                    FD_MAP
-                        .lock()
-                        .unwrap()
-                        .insert(TASK_FD_OP.0, (idx, TASK_FD_OP.1));
+                    // 如果是pending就加入(*FD_MAP)中
+                    (*FD_MAP).insert(TASK_FD_OP.0, (idx, TASK_FD_OP.1));
                     // 创建epoll_event结构
                     let mut event = EpollEvent::new(TASK_FD_OP.1, TASK_FD_OP.0 as u64);
                     if let Err(err) =

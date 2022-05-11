@@ -2,6 +2,7 @@ use core::pin::Pin;
 use std::{
     collections::HashMap,
     future::Future,
+    ptr::{null, null_mut},
     sync::{Arc, Mutex},
 };
 
@@ -26,7 +27,4 @@ pub static mut TASK_FD_OP: (i32, epoll::EpollFlags) = (0, epoll::EpollFlags::emp
 
 pub static mut EPFD: i32 = -1;
 
-lazy_static! {
-    pub static ref FD_MAP: Arc<Mutex<HashMap<i32, (usize, EpollFlags)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-}
+pub static mut FD_MAP: *mut HashMap<i32, (usize, EpollFlags)> = null_mut();
