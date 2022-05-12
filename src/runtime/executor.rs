@@ -21,6 +21,8 @@ impl<'a> Executor<'a> {
     pub fn run(&mut self) {
         let waker = futures::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
+        // FD_MAP初始化的值在这里，不要放到unsafe代码块里了，不然代码块结束就直接析构了，后面运行会段错误
+        let mut global_fd_map = HashMap::new();
 
         unsafe {
             // 初始化EPFD
@@ -32,7 +34,7 @@ impl<'a> Executor<'a> {
             };
 
             // 初始化FD_MAP
-            FD_MAP = &mut HashMap::new();
+            FD_MAP = &mut global_fd_map;
         }
 
         loop {
